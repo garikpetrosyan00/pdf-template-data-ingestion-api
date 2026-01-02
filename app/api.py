@@ -3,6 +3,11 @@ import shutil
 import os
 import tempfile
 from app.extractor.parser import extract_data_from_pdf
+from app.db.database import SessionLocal, engine, Base
+from app.db.models import DocumentExtraction
+
+# Create tables if they don't exist
+Base.metadata.create_all(bind=engine)
 
 router = APIRouter()
 
@@ -20,6 +25,23 @@ async def extract_pdf_data(file: UploadFile = File(...)):
         
         # Extract data
         extracted_data = extract_data_from_pdf(tmp_path)
+        
+        # Persist to Database
+        db = SessionLocal()
+        try:
+            db_record = DocumentExtraction(
+                filename=file.filename,
+                document_type="invoice",
+                extracted_data=extracted_data
+            )
+            db.add(db_record)
+            db.commit()
+            db.refresh(db_record)
+        except Exception as db_err:
+            db.rollback()
+            raise Exception(f"Database error: {str(db_err)}")
+        finally:
+            db.close()
         
         return {
             "status": "success",
